@@ -1,0 +1,84 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Choose what to claim",
+        "description": "Pick the energy sensor that measures your EV charging. A sensor that resets every day (like a smart plug's \"Today's consumption\") works best.",
+        "data": {
+          "name": "Claim name",
+          "energy_sensor": "Daily energy sensor (kWh)",
+          "power_sensor": "Power sensor (W)",
+          "month_sensor": "Monthly energy sensor (kWh)"
+        },
+        "data_description": {
+          "name": "Used for the device name and the report folder, e.g. \"EV charging\".",
+          "energy_sensor": "The sensor whose daily kWh go into the claim. This can't be changed later.",
+          "power_sensor": "Optional. Only used to show whether the car is charging right now.",
+          "month_sensor": "Optional. The plug's own month-to-date total, used to cross-check the ledger."
+        }
+      },
+      "claim": {
+        "title": "Claim details for {name}",
+        "data": {
+          "rate": "Rate per kWh",
+          "vehicle": "Vehicle",
+          "registration": "Registration",
+          "auto_generate": "Generate the report automatically each month",
+          "generate_time": "Report time on the 1st of the month",
+          "output_folder": "Report folder (inside Media)",
+          "notify_service": "Notify action"
+        },
+        "data_description": {
+          "rate": "The home charging rate you claim, in AUD per kWh (up to 6 decimals).",
+          "vehicle": "Optional. Shown in the report header, e.g. \"Mitsubishi Outlander PHEV\".",
+          "registration": "Optional. Shown in the report header.",
+          "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
+          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover."
+        }
+      }
+    },
+    "error": {
+      "invalid_rate": "The rate must be greater than 0.",
+      "invalid_folder": "Enter a relative folder path such as plug_and_claim/ev_charging (no \"..\" or backslashes).",
+      "notify_not_found": "That notify action doesn't exist. Use the full name, e.g. notify.pushover."
+    },
+    "abort": {
+      "already_configured": "There is already a claim for this energy sensor."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Claim details",
+        "data": {
+          "rate": "Rate per kWh",
+          "vehicle": "Vehicle",
+          "registration": "Registration",
+          "auto_generate": "Generate the report automatically each month",
+          "generate_time": "Report time on the 1st of the month",
+          "output_folder": "Report folder (inside Media)",
+          "notify_service": "Notify action"
+        },
+        "data_description": {
+          "rate": "The home charging rate you claim, in AUD per kWh (up to 6 decimals).",
+          "vehicle": "Optional. Shown in the report header, e.g. \"Mitsubishi Outlander PHEV\".",
+          "registration": "Optional. Shown in the report header.",
+          "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
+          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover."
+        }
+      }
+    },
+    "error": {
+      "invalid_rate": "The rate must be greater than 0.",
+      "invalid_folder": "Enter a relative folder path such as plug_and_claim/ev_charging (no \"..\" or backslashes).",
+      "notify_not_found": "That notify action doesn't exist. Use the full name, e.g. notify.pushover."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_sync": {
+        "name": "Last sync"
+      }
+    }
+  }
+}

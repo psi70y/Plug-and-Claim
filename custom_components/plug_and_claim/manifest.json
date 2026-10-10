@@ -1,0 +1,13 @@
+{
+  "domain": "plug_and_claim",
+  "name": "Plug & Claim",
+  "codeowners": ["@psi70y"],
+  "config_flow": true,
+  "dependencies": ["media_source", "recorder"],
+  "documentation": "https://github.com/psi70y/Plug-and-Claim",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/psi70y/Plug-and-Claim/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
