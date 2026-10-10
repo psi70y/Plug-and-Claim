@@ -1,0 +1,50 @@
+# ---- Local / private (never commit) ----
+CLAUDE.local.md
+CLAUDE.md
+.claude/
+reference/
+*.local.*
+
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+__MACOSX/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Editors ----
+.vscode/
+.idea/
+*.code-workspace
+
+# ---- HA dev / generated output ----
+config/
+*.log
+*.xlsx
+*.xls
+*.pdf
