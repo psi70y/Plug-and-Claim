@@ -10,3 +10,8 @@
 - `sync` and `set_day` actions, "Ledger days" sensor and diagnostics download.
 - Diagnostics compare each month's ledger total with the optional monthly
   sensor's own total.
+- Monthly claim report as XLSX and PDF (one A4 page) in the Tapo-export
+  layout, with an optional header block; amounts rounded half-up to cents.
+- Reports saved under the media folder by year; `generate_report` action,
+  `plug_and_claim_report_generated` event and optional notification.
+- Generating a report finalises the month.

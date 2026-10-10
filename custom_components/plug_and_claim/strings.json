@@ -26,14 +26,16 @@
           "auto_generate": "Generate the report automatically each month",
           "generate_time": "Report time on the 1st of the month",
           "output_folder": "Report folder (inside Media)",
-          "notify_service": "Notify action"
+          "notify_service": "Notify action",
+          "include_header": "Include the header block in reports"
         },
         "data_description": {
           "rate": "The home charging rate you claim, in AUD per kWh (up to 6 decimals).",
           "vehicle": "Optional. Shown in the report header, e.g. \"Mitsubishi Outlander PHEV\".",
           "registration": "Optional. Shown in the report header.",
           "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
-          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover."
+          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover.",
+          "include_header": "Adds the title, vehicle, registration, period, data source and generated time above the tables."
         }
       }
     },
@@ -57,14 +59,16 @@
           "auto_generate": "Generate the report automatically each month",
           "generate_time": "Report time on the 1st of the month",
           "output_folder": "Report folder (inside Media)",
-          "notify_service": "Notify action"
+          "notify_service": "Notify action",
+          "include_header": "Include the header block in reports"
         },
         "data_description": {
           "rate": "The home charging rate you claim, in AUD per kWh (up to 6 decimals).",
           "vehicle": "Optional. Shown in the report header, e.g. \"Mitsubishi Outlander PHEV\".",
           "registration": "Optional. Shown in the report header.",
           "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
-          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover."
+          "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover.",
+          "include_header": "Adds the title, vehicle, registration, period, data source and generated time above the tables."
         }
       }
     },
@@ -104,6 +108,12 @@
     },
     "date_not_past": {
       "message": "{date} isn't a completed day yet. Only past days can be set."
+    },
+    "month_not_finished": {
+      "message": "{month} hasn't finished yet. Reports can only be generated for past months."
+    },
+    "invalid_folder": {
+      "message": "The report folder {folder} is outside Home Assistant's media folder."
     }
   },
   "services": {
@@ -136,6 +146,28 @@
         "kwh": {
           "name": "Energy",
           "description": "The day's energy in kWh."
+        }
+      }
+    },
+    "generate_report": {
+      "name": "Generate report",
+      "description": "Writes the monthly claim report (XLSX and PDF) to the Media folder and records it. The month is then finalised, so automatic syncs leave it alone. Returns the totals and file paths when called with a response.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Claim",
+          "description": "The Plug & Claim claim to report on."
+        },
+        "month": {
+          "name": "Month",
+          "description": "The month to report, as YYYY-MM, e.g. 2026-09. It must have finished."
+        },
+        "refresh_data": {
+          "name": "Refresh data",
+          "description": "Re-read the month from the recorder first, even if it was finalised. Days you set by hand are kept."
+        },
+        "notify": {
+          "name": "Notify",
+          "description": "Send the notification. Leave out to notify only if a notify action is set in the claim's settings."
         }
       }
     }

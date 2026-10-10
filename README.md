@@ -12,7 +12,8 @@ It isn't tied to one brand: any `sensor` with the `energy` device class
 (kWh) works, so you can use it with other smart plugs or EV chargers.
 
 > **Status: early development (0.1.0, not released yet).** The daily ledger
-> works; the reports and the rest of the entities are still being built.
+> and reports work; the monthly schedule and the rest of the entities are
+> still being built.
 
 ## Installation (HACS custom repository)
 
@@ -72,6 +73,32 @@ plug's app shows. If you choose the plug's monthly sensor during setup, the
 diagnostics show each month's ledger total next to the plug's own month total
 so you can see the difference.
 
+## Reports
+
+Each report is an XLSX and a PDF in the same layout as the Tapo app export my
+lease provider already knows: a summary row (month, kWh, rate, amount) and one
+row per day, including zero days. An optional header block above it shows the
+vehicle, registration, period, data source and when it was generated.
+
+- **Saved to:** `<media>/<report folder>/<year>/Energy_Usage_Sep_2026.xlsx`
+  and `.pdf`. On Home Assistant OS that's
+  `/media/plug_and_claim/ev_charging/2026/`, reachable through the Samba
+  share or the File editor. (Home Assistant's Media browser only lists audio,
+  video and images, so the reports don't show up there.)
+- **Amount** is total kWh × rate, rounded half-up to the cent
+  (e.g. 255.303087 × $0.407 = $103.908… → **$103.91**).
+- **Days with no data** are shown as "no data" (never as 0), listed in the
+  header, and logged as a warning.
+- Generating a month **finalises** it: automatic syncs no longer change it.
+  Use `refresh_data: true` to re-read it from the recorder; values you set by
+  hand are kept.
+- If you set a notify action, you get a message like
+  "September 2026 EV charging: 255.30 kWh × $0.407 = $103.91. Report saved to
+  /media/plug_and_claim/ev_charging/2026."
+- The event `plug_and_claim_report_generated` is fired with `entry_id`,
+  `month`, `kwh`, `rate`, `amount` and `files`, so you can build your own
+  automations (e.g. email the PDF).
+
 ## Entities
 
 | Entity | Notes |
@@ -85,6 +112,7 @@ so you can see the difference.
 | --- | --- |
 | `plug_and_claim.sync` | Re-reads the last `days_back` days (default 14) from the recorder. Call it with a response to see which days changed. |
 | `plug_and_claim.set_day` | Sets one past day's kWh by hand, e.g. to fill a gap. |
+| `plug_and_claim.generate_report` | Writes the report for a finished `month` (`YYYY-MM`). Optional `refresh_data` and `notify`. Call it with a response to get the totals and file paths. |
 
 Example (Developer tools → Actions, with **Return response** ticked):
 
@@ -93,6 +121,13 @@ action: plug_and_claim.sync
 data:
   config_entry_id: <your claim>
   days_back: 45
+```
+
+```yaml
+action: plug_and_claim.generate_report
+data:
+  config_entry_id: <your claim>
+  month: "2026-09"
 ```
 
 ## Diagnostics

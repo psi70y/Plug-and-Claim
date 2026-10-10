@@ -34,6 +34,7 @@ from .const import (
     CONF_AUTO_GENERATE,
     CONF_ENERGY_SENSOR,
     CONF_GENERATE_TIME,
+    CONF_INCLUDE_HEADER,
     CONF_MONTH_SENSOR,
     CONF_NAME,
     CONF_NOTIFY_SERVICE,
@@ -45,6 +46,7 @@ from .const import (
     CURRENCY,
     DEFAULT_AUTO_GENERATE,
     DEFAULT_GENERATE_TIME,
+    DEFAULT_INCLUDE_HEADER,
     DEFAULT_NAME,
     DEFAULT_RATE,
     DOMAIN,
@@ -105,6 +107,7 @@ def _claim_schema() -> vol.Schema:
         vol.Required(CONF_AUTO_GENERATE): selector.BooleanSelector(),
         vol.Required(CONF_GENERATE_TIME): selector.TimeSelector(),
         vol.Required(CONF_OUTPUT_FOLDER): _text_selector(),
+        vol.Required(CONF_INCLUDE_HEADER): selector.BooleanSelector(),
         vol.Optional(CONF_NOTIFY_SERVICE): _text_selector(),
     })
 
@@ -115,6 +118,7 @@ def _default_claim_options(name: str) -> dict[str, Any]:
         CONF_AUTO_GENERATE: DEFAULT_AUTO_GENERATE,
         CONF_GENERATE_TIME: DEFAULT_GENERATE_TIME,
         CONF_OUTPUT_FOLDER: f"{OUTPUT_FOLDER_ROOT}/{slugify(name)}",
+        CONF_INCLUDE_HEADER: DEFAULT_INCLUDE_HEADER,
     }
 
 

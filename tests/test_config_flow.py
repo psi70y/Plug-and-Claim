@@ -13,6 +13,7 @@ from custom_components.plug_and_claim.const import (
     CONF_AUTO_GENERATE,
     CONF_ENERGY_SENSOR,
     CONF_GENERATE_TIME,
+    CONF_INCLUDE_HEADER,
     CONF_MONTH_SENSOR,
     CONF_NAME,
     CONF_NOTIFY_SERVICE,
@@ -32,6 +33,7 @@ CLAIM_INPUT = {
     CONF_AUTO_GENERATE: True,
     CONF_GENERATE_TIME: "01:00:00",
     CONF_OUTPUT_FOLDER: "plug_and_claim/ev_charging",
+    CONF_INCLUDE_HEADER: True,
 }
 
 

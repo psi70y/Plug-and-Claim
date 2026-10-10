@@ -33,3 +33,23 @@ set_day:
           step: any
           mode: box
           unit_of_measurement: kWh
+
+generate_report:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: plug_and_claim
+    month:
+      required: true
+      example: "2026-09"
+      selector:
+        text:
+    refresh_data:
+      default: false
+      selector:
+        boolean:
+    notify:
+      selector:
+        boolean:

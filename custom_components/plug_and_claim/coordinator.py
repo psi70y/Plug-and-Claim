@@ -29,6 +29,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
+from pathlib import Path
 from typing import Any
 
 from homeassistant.components.recorder import get_instance
@@ -52,7 +53,20 @@ from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_ENERGY_SENSOR, CONF_MONTH_SENSOR, DOMAIN
+from .const import (
+    CONF_ENERGY_SENSOR,
+    CONF_INCLUDE_HEADER,
+    CONF_MONTH_SENSOR,
+    CONF_NOTIFY_SERVICE,
+    CONF_OUTPUT_FOLDER,
+    CONF_RATE,
+    CONF_REGISTRATION,
+    CONF_VEHICLE,
+    DEFAULT_INCLUDE_HEADER,
+    DEFAULT_RATE,
+    DOMAIN,
+    EVENT_REPORT_GENERATED,
+)
 from .ledger import (
     SOURCE_LIVE,
     SOURCE_MANUAL,
@@ -62,7 +76,9 @@ from .ledger import (
     expected_hours,
     iter_days,
     local_midnight,
+    month_key,
 )
+from .report import MonthReport, build_report, write_pdf, write_xlsx
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -94,6 +110,15 @@ class PlugAndClaimData:
     last_sync: datetime | None = None
     ledger_days: int = 0
     mode: str | None = None
+
+
+class ReportError(Exception):
+    """A report couldn't be generated; .key is a translation key."""
+
+    def __init__(self, key: str, **placeholders: str) -> None:
+        super().__init__(key)
+        self.key = key
+        self.placeholders = placeholders
 
 
 @dataclass
@@ -179,21 +204,33 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
     # ------------------------------------------------------------------ sync
 
     async def async_sync(
-        self, days_back: int | None = None, overwrite_finalised: bool = False
+        self,
+        days_back: int | None = None,
+        overwrite_finalised: bool = False,
+        *,
+        first_day: date | None = None,
+        last_day: date | None = None,
     ) -> SyncResult:
-        """Bring the ledger up to date (see module docstring)."""
+        """Bring the ledger up to date (see module docstring).
+
+        first_day/last_day re-read one specific range instead (used when a
+        report is regenerated with refresh_data).
+        """
         async with self._sync_lock:
             today = dt_util.now().date()
             yesterday = today - timedelta(days=1)
 
             if await self._async_has_statistics():
                 self._set_mode(MODE_STATISTICS)
-                backfill = days_back is None and not self.ledger.backfilled
+                backfill = days_back is None and first_day is None and not self.ledger.backfilled
                 if backfill:
                     start = BACKFILL_FROM
+                elif first_day is not None:
+                    start = first_day
                 else:
                     start = today - timedelta(days=days_back or DEFAULT_SYNC_DAYS)
-                result = await self._async_sync_statistics(start, yesterday, overwrite_finalised)
+                end = min(last_day or yesterday, yesterday)
+                result = await self._async_sync_statistics(start, end, overwrite_finalised)
                 if backfill:
                     self.ledger.backfilled = True
                     _LOGGER.info(
@@ -412,6 +449,134 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
             if row.get("state") is not None
         }
 
+    # --------------------------------------------------------------- reports
+
+    def rate_for_month(self, month: str) -> float:
+        """The rate that applies to a month.
+
+        Rate history (ledger "rates", added in Phase 5) wins: the latest entry
+        whose "from" month is on or before this month. Otherwise the current
+        rate from the claim's settings.
+        """
+        applicable = [r for r in self.ledger.data["rates"] if r["from"] <= month]
+        if applicable:
+            return max(applicable, key=lambda r: r["from"])["rate"]
+        return self.config_entry.options.get(CONF_RATE, DEFAULT_RATE)
+
+    def media_root(self) -> Path:
+        """HA's media folder (/media on HA OS), as the Media browser sees it."""
+        media_dirs = self.hass.config.media_dirs
+        root = media_dirs.get("local") or next(iter(media_dirs.values()), None)
+        return Path(root or self.hass.config.path("media"))
+
+    def report_folder(self, month: str) -> Path:
+        """<media>/<output folder>/<YYYY>, refusing anything outside media."""
+        root = self.media_root().resolve()
+        folder = (root / self.config_entry.options[CONF_OUTPUT_FOLDER] / month[:4]).resolve()
+        if not folder.is_relative_to(root):
+            raise ReportError("invalid_folder", folder=str(folder))
+        return folder
+
+    async def async_generate_report(
+        self, month: str, *, refresh_data: bool = False, notify: bool | None = None
+    ) -> dict[str, Any]:
+        """Write the XLSX and PDF for one finished month and record it.
+
+        refresh_data re-reads that month from the recorder first, even if the
+        month was finalised. notify defaults to "yes if a notify action is
+        configured". Returns the same data as the report-generated event.
+        """
+        today = dt_util.now().date()
+        if month >= month_key(today):
+            raise ReportError("month_not_finished", month=month)
+
+        first = date.fromisoformat(f"{month}-01")
+        if refresh_data:
+            last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+            await self.async_sync(first_day=first, last_day=last, overwrite_finalised=True)
+
+        options = self.config_entry.options
+        rate = self.rate_for_month(month)
+        report = build_report(
+            month,
+            {k: v["kwh"] for k, v in self.ledger.month_days(month).items()},
+            rate,
+            vehicle=options.get(CONF_VEHICLE),
+            registration=options.get(CONF_REGISTRATION),
+            source=self.energy_sensor,
+            generated=dt_util.now(),
+            include_header=options.get(CONF_INCLUDE_HEADER, DEFAULT_INCLUDE_HEADER),
+        )
+        folder = self.report_folder(month)
+        files = await self.hass.async_add_executor_job(_write_report_files, report, folder)
+
+        if report.missing_days:
+            _LOGGER.warning(
+                "%s: %s report generated with no data for %s",
+                self.config_entry.title,
+                report.long_name,
+                ", ".join(d.isoformat() for d in report.missing_days),
+            )
+
+        result = {
+            "entry_id": self.config_entry.entry_id,
+            "month": month,
+            "kwh": float(report.total_kwh),
+            "rate": float(report.rate),
+            "amount": float(report.amount),
+            "files": [str(f) for f in files],
+        }
+        async with self._sync_lock:
+            self.ledger.data["reports"][month] = {
+                "generated": report.generated.isoformat(),
+                "kwh": result["kwh"],
+                "rate": result["rate"],
+                "amount": result["amount"],
+                "files": result["files"],
+                "missing_days": [d.isoformat() for d in report.missing_days],
+            }
+            # A month with a report is finalised: automatic syncs leave it alone.
+            if month not in self.ledger.data["finalised_months"]:
+                self.ledger.data["finalised_months"].append(month)
+                self.ledger.data["finalised_months"].sort()
+            await self.ledger.async_save()
+        self._publish()
+
+        _LOGGER.info(
+            "%s: %s report: %s kWh x $%s = $%s, saved to %s",
+            self.config_entry.title,
+            report.long_name,
+            report.total_kwh,
+            report.rate,
+            report.amount,
+            folder,
+        )
+        self.hass.bus.async_fire(EVENT_REPORT_GENERATED, result)
+
+        notify_service = options.get(CONF_NOTIFY_SERVICE)
+        if notify_service and (notify is None or notify):
+            await self._async_notify(notify_service, report, folder)
+        return result
+
+    async def _async_notify(self, service: str, report: MonthReport, folder: Path) -> None:
+        # HA's Media browser only lists audio/video/images, so point to the
+        # folder itself (reachable via Samba or the File editor).
+        domain, _, name = service.partition(".")
+        message = (
+            f"{report.long_name} {self.config_entry.title}: "
+            f"{report.total_kwh:.2f} kWh × ${report.rate.normalize()} = ${report.amount}. "
+            f"Report saved to {folder}."
+        )
+        if report.missing_days:
+            message += f" {len(report.missing_days)} day(s) have no data."
+        try:
+            await self.hass.services.async_call(
+                domain, name, {"title": "Plug & Claim", "message": message}, blocking=True
+            )
+        except Exception:
+            # A failed notification must not lose the report itself.
+            _LOGGER.exception("%s: couldn't send the report notification via %s", self.config_entry.title, service)
+
     # ---------------------------------------------------------------- set_day
 
     async def async_set_day(self, day: date, kwh: float) -> None:
@@ -421,6 +586,16 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
             await self.ledger.async_save()
             self._publish()
             _LOGGER.info("%s: %s set manually to %s kWh", self.config_entry.title, day, kwh)
+
+
+def _write_report_files(report: MonthReport, folder: Path) -> list[Path]:
+    """Runs in the executor: create the year folder and write both files."""
+    folder.mkdir(parents=True, exist_ok=True)
+    xlsx = folder / f"{report.file_stem}.xlsx"
+    pdf = folder / f"{report.file_stem}.pdf"
+    write_xlsx(report, xlsx)
+    write_pdf(report, pdf)
+    return [xlsx, pdf]
 
 
 def _kwh_from_state(state: State) -> float | None:
