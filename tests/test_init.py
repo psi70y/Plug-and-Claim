@@ -46,7 +46,8 @@ async def test_setup_and_unload(hass: HomeAssistant) -> None:
 
     entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{entry.entry_id}_last_sync")
     assert entity_id == "sensor.ev_charging_last_sync"
-    assert hass.states.get(entity_id).state == STATE_UNKNOWN
+    # The startup sync has run, so Last sync has a time.
+    assert hass.states.get(entity_id).state != STATE_UNKNOWN
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()

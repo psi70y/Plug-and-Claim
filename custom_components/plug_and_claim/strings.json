@@ -78,6 +78,65 @@
     "sensor": {
       "last_sync": {
         "name": "Last sync"
+      },
+      "ledger_days": {
+        "name": "Ledger days",
+        "state_attributes": {
+          "capture_mode": {
+            "name": "Capture mode"
+          },
+          "first_day": {
+            "name": "First day"
+          },
+          "last_day": {
+            "name": "Last day"
+          }
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "entry_not_found": {
+      "message": "No Plug & Claim claim with config entry ID {entry_id}."
+    },
+    "entry_not_loaded": {
+      "message": "The claim {name} isn't loaded. Check it under Settings → Devices & services."
+    },
+    "date_not_past": {
+      "message": "{date} isn't a completed day yet. Only past days can be set."
+    }
+  },
+  "services": {
+    "sync": {
+      "name": "Sync ledger",
+      "description": "Updates the claim's daily kWh ledger from the recorder's long-term statistics. Returns the days it changed when called with a response.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Claim",
+          "description": "The Plug & Claim claim to sync."
+        },
+        "days_back": {
+          "name": "Days back",
+          "description": "How many days back to re-read. Days in finalised months, and days set manually or imported, are left alone."
+        }
+      }
+    },
+    "set_day": {
+      "name": "Set day",
+      "description": "Sets one day's kWh by hand, e.g. to fill a gap or correct a reading. Manual values are never replaced by an automatic sync.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Claim",
+          "description": "The Plug & Claim claim to change."
+        },
+        "date": {
+          "name": "Date",
+          "description": "The day to set (must be in the past)."
+        },
+        "kwh": {
+          "name": "Energy",
+          "description": "The day's energy in kWh."
+        }
       }
     }
   }

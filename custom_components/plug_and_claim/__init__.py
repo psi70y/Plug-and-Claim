@@ -12,6 +12,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PlugAndClaimConfigEntry, PlugAndClaimCoordinator
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,8 +34,9 @@ def _ensure_default_log_level() -> None:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration (services are registered here from Phase 2)."""
+    """Set up the integration-wide parts: logging default and actions."""
     _ensure_default_log_level()
+    async_setup_services(hass)
     return True
 
 
@@ -45,6 +47,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry)
     entry.runtime_data = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Startup sync (once HA has fully started) and the nightly 00:10 sync.
+    coordinator.async_start()
     # Reload when options change so new settings take effect straight away.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
