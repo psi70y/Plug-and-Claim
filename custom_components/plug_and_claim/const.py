@@ -4,7 +4,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "plug_and_claim"
 
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.BUTTON, Platform.SELECT, Platform.SENSOR]
 
 # ---- Setup step 1 (source) - stored in entry.data, fixed after setup ----
 CONF_NAME = "name"

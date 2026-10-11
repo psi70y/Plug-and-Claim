@@ -96,6 +96,139 @@
             "name": "Last day"
           }
         }
+      },
+      "this_month_energy": {
+        "name": "This month energy",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          }
+        }
+      },
+      "this_month_claim": {
+        "name": "This month estimated claim",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          }
+        }
+      },
+      "last_month_energy": {
+        "name": "Last month energy",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          }
+        }
+      },
+      "last_month_claim": {
+        "name": "Last month claim",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          }
+        }
+      },
+      "selected_month_energy": {
+        "name": "Selected month energy",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          },
+          "report_files": {
+            "name": "Report files"
+          },
+          "report_generated": {
+            "name": "Report generated"
+          },
+          "report_amount": {
+            "name": "Reported amount"
+          }
+        }
+      },
+      "selected_month_claim": {
+        "name": "Selected month claim",
+        "state_attributes": {
+          "month": {
+            "name": "Month"
+          },
+          "rate": {
+            "name": "Rate"
+          },
+          "day_count": {
+            "name": "Days with data"
+          },
+          "missing_days": {
+            "name": "Missing days"
+          },
+          "report_files": {
+            "name": "Report files"
+          },
+          "report_generated": {
+            "name": "Report generated"
+          },
+          "report_amount": {
+            "name": "Reported amount"
+          }
+        }
+      }
+    },
+    "select": {
+      "report_month": {
+        "name": "Report month"
+      }
+    },
+    "button": {
+      "generate_report": {
+        "name": "Generate report for selected month"
+      },
+      "sync_now": {
+        "name": "Sync now"
       }
     }
   },
@@ -114,6 +247,9 @@
     },
     "invalid_folder": {
       "message": "The report folder {folder} is outside Home Assistant's media folder."
+    },
+    "no_month_selected": {
+      "message": "There's no finished month in the ledger to report on yet."
     }
   },
   "services": {
@@ -170,6 +306,12 @@
           "description": "Send the notification. Leave out to notify only if a notify action is set in the claim's settings."
         }
       }
+    }
+  },
+  "issues": {
+    "missing_days": {
+      "title": "{name}: {month} report has days with no data",
+      "description": "The {month} report for {name} was generated, but the ledger has no data for: {days}.\n\nThese days are shown as \"no data\" in the report, not as 0 kWh. If you know the values, set them with the **Plug & Claim: Set day** action, then generate the report again. This issue clears itself once the month is complete."
     }
   }
 }

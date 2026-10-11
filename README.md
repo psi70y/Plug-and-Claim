@@ -11,9 +11,9 @@ report (XLSX + PDF) for me, saved in Home Assistant's Media folder.
 It isn't tied to one brand: any `sensor` with the `energy` device class
 (kWh) works, so you can use it with other smart plugs or EV chargers.
 
-> **Status: early development (0.1.0, not released yet).** The daily ledger
-> and reports work; the monthly schedule and the rest of the entities are
-> still being built.
+> **Status: early development (0.1.0, not released yet).** The daily ledger,
+> reports and entities work; report downloads from the dashboard and the
+> monthly schedule are still being built.
 
 ## Installation (HACS custom repository)
 
@@ -103,8 +103,20 @@ vehicle, registration, period, data source and when it was generated.
 
 | Entity | Notes |
 | --- | --- |
+| This month energy | kWh so far this month, including today (updated every 5 minutes). |
+| This month estimated claim | This month's kWh × rate, in AUD. |
+| Last month energy / Last month claim | Last month's totals, the same figures the report uses. |
+| Report month | Select a finished month, e.g. "2026-09 (Sep 2026)". Remembered across restarts. |
+| Selected month energy / Selected month claim | Totals for the month in Report month. Attributes: rate, days with data, missing days, report files, when the report was generated. |
+| Generate report for selected month | Button. Writes the report for the month in Report month. |
+| Sync now | Diagnostic button. Re-reads the last 14 days from the recorder. |
 | Last sync | Diagnostic. When the ledger was last updated. |
 | Ledger days | Diagnostic. Number of days in the ledger; attributes show the capture mode and first/last day. |
+
+The month sensors also have `month`, `rate`, `day_count` and `missing_days`
+attributes. If a report is generated for a month with days that have no data,
+a **Repairs** issue lists them; it clears itself once you fill the days (with
+`set_day`) and generate the report again.
 
 ## Actions
 

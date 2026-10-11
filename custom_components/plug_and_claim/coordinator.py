@@ -26,8 +26,9 @@ nothing is polled.
 """
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 import logging
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ from typing import Any
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import (
     get_metadata,
+    statistic_during_period,
     statistics_during_period,
 )
 from homeassistant.config_entries import ConfigEntry
@@ -45,6 +47,7 @@ from homeassistant.const import (
     UnitOfEnergy,
 )
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_change,
@@ -85,6 +88,8 @@ _LOGGER = logging.getLogger(__name__)
 type PlugAndClaimConfigEntry = ConfigEntry[PlugAndClaimCoordinator]
 
 DEFAULT_SYNC_DAYS = 14
+# How often "this month" (which includes today so far) is recalculated.
+REFRESH_INTERVAL = timedelta(minutes=5)
 # Nightly sync time (local). 10 minutes past midnight leaves the recorder
 # time to compile the 23:00-24:00 hourly statistics.
 SYNC_HOUR = 0
@@ -104,12 +109,30 @@ UNIT_FACTORS = {
 
 
 @dataclass
+class MonthSummary:
+    """One month's figures as the sensors show them."""
+
+    month: str
+    kwh: Decimal
+    amount: Decimal
+    rate: float
+    day_count: int
+    missing_days: list[str]
+    report: dict[str, Any] | None = None
+
+
+@dataclass
 class PlugAndClaimData:
     """Snapshot of what the entities display."""
 
     last_sync: datetime | None = None
     ledger_days: int = 0
     mode: str | None = None
+    this_month: MonthSummary | None = None
+    last_month: MonthSummary | None = None
+    selected: MonthSummary | None = None
+    # Finished months that can be reported on, newest first ("2026-09").
+    report_months: list[str] = field(default_factory=list)
 
 
 class ReportError(Exception):
@@ -133,7 +156,12 @@ class SyncResult:
 
 
 class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
-    """Holds the ledger for one claim. No update_interval: data is pushed."""
+    """Holds the ledger for one claim.
+
+    Ledger changes are pushed straight away (async_refresh after each sync,
+    report or correction). The 5-minute interval only keeps "this month",
+    which includes today's usage so far, up to date.
+    """
 
     config_entry: PlugAndClaimConfigEntry
 
@@ -143,6 +171,7 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN} {entry.title}",
+            update_interval=REFRESH_INTERVAL,
         )
         self.energy_sensor: str = entry.data[CONF_ENERGY_SENSOR]
         self.month_sensor: str | None = entry.data.get(CONF_MONTH_SENSOR)
@@ -158,17 +187,86 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
         await self.ledger.async_load()
 
     async def _async_update_data(self) -> PlugAndClaimData:
-        return self._snapshot()
-
-    def _snapshot(self) -> PlugAndClaimData:
+        today = dt_util.now().date()
+        this_month = month_key(today)
+        last_month = month_key(today.replace(day=1) - timedelta(days=1))
+        months = self.report_months(today)
+        selected = self.selected_month(months)
         return PlugAndClaimData(
             last_sync=self.ledger.last_sync,
             ledger_days=len(self.ledger.days),
             mode=self.mode,
+            this_month=self.month_summary(this_month, today, await self._async_today_kwh(today)),
+            last_month=self.month_summary(last_month, today),
+            selected=self.month_summary(selected, today) if selected else None,
+            report_months=months,
         )
 
-    def _publish(self) -> None:
-        self.async_set_updated_data(self._snapshot())
+    async def _async_publish(self) -> None:
+        """Recalculate what the entities show after the ledger changed."""
+        await self.async_refresh()
+
+    async def _async_today_kwh(self, today: date) -> float | None:
+        """Energy used so far today (not in the ledger until after midnight)."""
+        if self.mode == MODE_LIVE:
+            live = self.ledger.live
+            return live["kwh"] if live and live["date"] == today.isoformat() else None
+        if self.mode != MODE_STATISTICS:
+            return None
+        start = local_midnight(today, dt_util.get_default_time_zone())
+        try:
+            result = await get_instance(self.hass).async_add_executor_job(
+                lambda: statistic_during_period(
+                    self.hass, start, None, self.energy_sensor, {"change"},
+                    {"energy": UnitOfEnergy.KILO_WATT_HOUR},
+                )
+            )
+        except Exception:  # an estimate; never fail the refresh over it
+            _LOGGER.debug("Couldn't read today's usage so far", exc_info=True)
+            return None
+        return result.get("change")
+
+    # ------------------------------------------------------- month figures
+
+    def report_months(self, today: date) -> list[str]:
+        """Finished months that have ledger days or a report, newest first."""
+        current = month_key(today)
+        months = {key[:7] for key in self.ledger.days} | set(self.ledger.data["reports"])
+        return sorted((m for m in months if m < current), reverse=True)
+
+    def selected_month(self, months: list[str]) -> str | None:
+        """The Report month select's choice; defaults to the newest month."""
+        chosen = self.ledger.data["meta"].get("selected_month")
+        if chosen in months:
+            return chosen
+        return months[0] if months else None
+
+    async def async_select_month(self, month: str) -> None:
+        self.ledger.data["meta"]["selected_month"] = month
+        self.ledger.async_delay_save(5)
+        await self._async_publish()
+
+    def month_summary(self, month: str, today: date, today_kwh: float | None = None) -> MonthSummary:
+        """Totals for a month from the ledger, as the report would show them.
+
+        For the current month, today's usage so far is added and only days
+        before today can count as missing.
+        """
+        days = {k: v["kwh"] for k, v in self.ledger.month_days(month).items()}
+        if today_kwh is not None and month == month_key(today):
+            days[today.isoformat()] = today_kwh
+        rate = self.rate_for_month(month)
+        report = build_report(month, days, rate)
+        missing = [d.isoformat() for d in report.missing_days if d < today]
+        return MonthSummary(
+            month=month,
+            kwh=report.total_kwh,
+            amount=report.amount,
+            rate=rate,
+            day_count=len(days),
+            missing_days=missing,
+            report=self.ledger.data["reports"].get(month),
+        )
 
     @callback
     def async_start(self) -> None:
@@ -244,7 +342,7 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
 
             self.ledger.last_sync = dt_util.now()
             await self.ledger.async_save()
-            self._publish()
+            await self._async_publish()
             # Warn about gaps once, not every night while the day is in the
             # 14-day window: only for days this sync changed, or yesterday.
             new_gaps = {
@@ -510,13 +608,7 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
         folder = self.report_folder(month)
         files = await self.hass.async_add_executor_job(_write_report_files, report, folder)
 
-        if report.missing_days:
-            _LOGGER.warning(
-                "%s: %s report generated with no data for %s",
-                self.config_entry.title,
-                report.long_name,
-                ", ".join(d.isoformat() for d in report.missing_days),
-            )
+        self._update_missing_days_issue(report)
 
         result = {
             "entry_id": self.config_entry.entry_id,
@@ -540,7 +632,7 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
                 self.ledger.data["finalised_months"].append(month)
                 self.ledger.data["finalised_months"].sort()
             await self.ledger.async_save()
-        self._publish()
+        await self._async_publish()
 
         _LOGGER.info(
             "%s: %s report: %s kWh x $%s = $%s, saved to %s",
@@ -557,6 +649,34 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
         if notify_service and (notify is None or notify):
             await self._async_notify(notify_service, report, folder)
         return result
+
+    def _update_missing_days_issue(self, report: MonthReport) -> None:
+        """Raise a Repairs issue when a report has days with no data, or clear
+        it once the month is regenerated complete (e.g. after set_day)."""
+        issue_id = missing_days_issue_id(self.config_entry.entry_id, report.month)
+        if not report.missing_days:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+            return
+        days = ", ".join(d.isoformat() for d in report.missing_days)
+        _LOGGER.warning(
+            "%s: %s report generated with no data for %s",
+            self.config_entry.title,
+            report.long_name,
+            days,
+        )
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="missing_days",
+            translation_placeholders={
+                "name": self.config_entry.title,
+                "month": report.long_name,
+                "days": days,
+            },
+        )
 
     async def _async_notify(self, service: str, report: MonthReport, folder: Path) -> None:
         # HA's Media browser only lists audio/video/images, so point to the
@@ -584,8 +704,12 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
         async with self._sync_lock:
             self.ledger.set_day(day, kwh, SOURCE_MANUAL)
             await self.ledger.async_save()
-            self._publish()
+            await self._async_publish()
             _LOGGER.info("%s: %s set manually to %s kWh", self.config_entry.title, day, kwh)
+
+
+def missing_days_issue_id(entry_id: str, month: str) -> str:
+    return f"missing_days_{entry_id}_{month}"
 
 
 def _write_report_files(report: MonthReport, folder: Path) -> list[Path]:

@@ -143,6 +143,8 @@ async def test_backfill_from_statistics(hass: HomeAssistant, sydney) -> None:
     assert entry.runtime_data.mode == "statistics"
     assert hass.states.get("sensor.ev_charging_ledger_days").state == "4"
     assert hass.states.get("sensor.ev_charging_last_sync").state != "unknown"
+    # This month = 2-5 Oct from the ledger (39.8) + today so far (00:00-10:59, 11 kWh).
+    assert float(hass.states.get("sensor.ev_charging_this_month_energy").state) == 50.8
 
     # A manual correction survives later syncs.
     await hass.services.async_call(

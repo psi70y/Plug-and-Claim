@@ -15,3 +15,8 @@
 - Reports saved under the media folder by year; `generate_report` action,
   `plug_and_claim_report_generated` event and optional notification.
 - Generating a report finalises the month.
+- Sensors for this month (including today so far), last month and a selected
+  month (kWh and AUD), a "Report month" select, "Generate report" and
+  "Sync now" buttons.
+- Repairs issue when a report has days with no data, cleared automatically
+  once the month is complete.
