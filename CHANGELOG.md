@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-10-11
+
+First release.
 
 - Config flow (claim name and sensors, then claim details) and options flow.
 - One device per claim with a diagnostic "Last sync" sensor.
@@ -25,3 +27,5 @@
   catch-up at startup during the first 7 days if Home Assistant was off.
 - Rate history: changing the rate asks which month it applies from, so
   earlier months keep their rate.
+- Brand icon and logo.
+- GitHub workflow running hassfest, the HACS check and the tests.

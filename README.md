@@ -1,18 +1,22 @@
 # Plug & Claim
 
+<img src="custom_components/plug_and_claim/brand/icon.png" alt="" width="96" align="right">
+
 A Home Assistant integration that turns an energy sensor into a monthly
 charging claim.
 
 I charge a novated-lease car at home through a smart plug, and every month I
 claim the charging cost back. Plug & Claim keeps its own daily kWh ledger for
 the plug (separate from the recorder database) and produces the monthly claim
-report (XLSX + PDF) for me, saved in Home Assistant's Media folder.
+report (XLSX + PDF) for me on the 1st of every month, saved in Home
+Assistant's media folder and downloadable from a dashboard card.
 
 It isn't tied to one brand: any `sensor` with the `energy` device class
 (kWh) works, so you can use it with other smart plugs or EV chargers.
 
-> **Status: early development (0.1.0, not released yet).** Everything
-> described here works; packaging for the first release is still to come.
+Requires Home Assistant 2025.2 or newer. It installs two pure-Python
+libraries, `openpyxl` (XLSX) and `fpdf2` (PDF), so it runs on any platform,
+including Home Assistant OS on ARM.
 
 ## Installation (HACS custom repository)
 
@@ -223,6 +227,45 @@ data:
   config_entry_id: <your claim>
   month: "2026-09"
 ```
+
+## Email the report
+
+The `plug_and_claim_report_generated` event carries the file paths, so an
+automation can email the PDF. With an email (SMTP) notifier set up, for
+example as `notify.email`:
+
+```yaml
+alias: Email the EV charging claim
+triggers:
+  - trigger: event
+    event_type: plug_and_claim_report_generated
+actions:
+  - action: notify.email
+    data:
+      title: "EV charging claim {{ trigger.event.data.month }}"
+      message: >-
+        {{ trigger.event.data.kwh | round(2) }} kWh ×
+        ${{ trigger.event.data.rate }} = ${{ '%.2f' | format(trigger.event.data.amount) }}
+      data:
+        images: "{{ trigger.event.data.files | select('search', 'pdf$') | list }}"
+```
+
+The SMTP notifier's `images` field attaches other file types too (it logs a
+harmless warning that the PDF isn't an image). The media folder is allowed
+by default; if you changed `allowlist_external_dirs`, make sure it's included.
+
+## Limitations
+
+- **Reports don't show in the Media browser.** Home Assistant's Media browser
+  only lists audio, video and images. Use the dashboard card's download links,
+  the Samba share or the File editor.
+- **Daily-reset sensors run slightly low** (a few Wh per night of charging
+  across midnight, see above), and **days when Home Assistant was off count as
+  0 kWh**. Both mean the claim errs slightly in the lender's favour.
+- **Currency is AUD** and the layout follows the Tapo app's export.
+- **One energy sensor per claim.** Add a second claim for a second car or plug.
+- **Deleting a claim keeps its ledger file** in `/config/.storage` in case
+  that was a mistake. A new claim starts a new ledger.
 
 ## Diagnostics
 

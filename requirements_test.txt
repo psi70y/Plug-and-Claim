@@ -1,1 +1,4 @@
 pytest-homeassistant-custom-component
+# Same versions as manifest.json "requirements".
+fpdf2==2.8.9
+openpyxl==3.1.5
