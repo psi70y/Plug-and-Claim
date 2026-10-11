@@ -188,6 +188,12 @@
           },
           "report_amount": {
             "name": "Reported amount"
+          },
+          "pdf_url": {
+            "name": "PDF link"
+          },
+          "xlsx_url": {
+            "name": "XLSX link"
           }
         }
       },
@@ -214,6 +220,12 @@
           },
           "report_amount": {
             "name": "Reported amount"
+          },
+          "pdf_url": {
+            "name": "PDF link"
+          },
+          "xlsx_url": {
+            "name": "XLSX link"
           }
         }
       }

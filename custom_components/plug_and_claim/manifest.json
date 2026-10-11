@@ -3,7 +3,7 @@
   "name": "Plug & Claim",
   "codeowners": ["@psi70y"],
   "config_flow": true,
-  "dependencies": ["media_source", "recorder"],
+  "dependencies": ["http", "media_source", "recorder"],
   "documentation": "https://github.com/psi70y/Plug-and-Claim",
   "integration_type": "service",
   "iot_class": "calculated",

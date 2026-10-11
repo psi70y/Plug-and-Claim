@@ -12,8 +12,8 @@ It isn't tied to one brand: any `sensor` with the `energy` device class
 (kWh) works, so you can use it with other smart plugs or EV chargers.
 
 > **Status: early development (0.1.0, not released yet).** The daily ledger,
-> reports and entities work; report downloads from the dashboard and the
-> monthly schedule are still being built.
+> reports, entities and dashboard downloads work; the monthly schedule and
+> CSV import are still being built.
 
 ## Installation (HACS custom repository)
 
@@ -99,6 +99,74 @@ vehicle, registration, period, data source and when it was generated.
   `month`, `kwh`, `rate`, `amount` and `files`, so you can build your own
   automations (e.g. email the PDF).
 
+## Dashboard card
+
+Pick a month, see its figures, generate the report and open it.
+
+**Your entity IDs may differ.** Home Assistant builds them from the device
+name, and on recent versions also from the device's area, e.g. a claim called
+"EV charging" in the area "Shed" gets `sensor.shed_ev_charging_…`. To list
+yours, paste this into **Developer tools → Template**:
+
+```jinja
+{% for e in integration_entities('plug_and_claim') %}
+{{ e }}
+{% endfor %}
+```
+
+Then replace the IDs below with yours. To add it to a dashboard, edit the
+dashboard, choose **+ Add card → Manual** (at the bottom of the list) and
+paste:
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: EV charging claim
+    entities:
+      - entity: select.ev_charging_report_month
+        name: Month
+      - entity: sensor.ev_charging_selected_month_energy
+        name: Energy
+      - entity: sensor.ev_charging_selected_month_claim
+        name: Claim
+      - entity: button.ev_charging_generate_report_for_selected_month
+        name: Generate report
+      - type: divider
+      - entity: sensor.ev_charging_this_month_energy
+        name: This month so far
+      - entity: sensor.ev_charging_this_month_estimated_claim
+        name: This month's estimated claim
+  - type: markdown
+    content: >-
+      {% set s = 'sensor.ev_charging_selected_month_claim' %}
+      {% if state_attr(s, 'pdf_url') %}
+      <a href="{{ state_attr(s, 'pdf_url') }}" target="_blank">📄 Open PDF</a> ·
+      <a href="{{ state_attr(s, 'xlsx_url') }}" target="_blank">📊 Download XLSX</a>
+      <br><small>Generated {{ as_timestamp(state_attr(s, 'report_generated')) | timestamp_custom('%d %b %Y %H:%M') }}</small>
+      {% else %}
+      No report yet for {{ state_attr(s, 'month') }}. Press **Generate report**.
+      {% endif %}
+```
+
+If you'd rather paste it into a view's **Raw configuration editor**, wrap it
+in a view, because that editor expects a whole view rather than one card:
+
+```yaml
+title: EV charging
+path: ev-charging
+type: masonry
+cards:
+  - type: vertical-stack
+    cards:
+      # ...the two cards above, indented to this level
+```
+
+The links are signed, so they work without logging in again, but they
+expire after 24 hours and whenever Home Assistant restarts. The card always
+shows fresh ones. Don't copy them anywhere permanent. They're also kept out
+of Home Assistant's history.
+
 ## Entities
 
 | Entity | Notes |
@@ -107,7 +175,7 @@ vehicle, registration, period, data source and when it was generated.
 | This month estimated claim | This month's kWh × rate, in AUD. |
 | Last month energy / Last month claim | Last month's totals, the same figures the report uses. |
 | Report month | Select a finished month, e.g. "2026-09 (Sep 2026)". Remembered across restarts. |
-| Selected month energy / Selected month claim | Totals for the month in Report month. Attributes: rate, days with data, missing days, report files, when the report was generated. |
+| Selected month energy / Selected month claim | Totals for the month in Report month. Attributes: rate, days with data, missing days, report files, when the report was generated, and signed `pdf_url` / `xlsx_url` download links once a report exists. |
 | Generate report for selected month | Button. Writes the report for the month in Report month. |
 | Sync now | Diagnostic button. Re-reads the last 14 days from the recorder. |
 | Last sync | Diagnostic. When the ledger was last updated. |

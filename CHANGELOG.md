@@ -20,3 +20,5 @@
   "Sync now" buttons.
 - Repairs issue when a report has days with no data, cleared automatically
   once the month is complete.
+- Secure download links (signed, 24 hours, not recorded in history) for the
+  selected month's PDF and XLSX, and an example dashboard card.

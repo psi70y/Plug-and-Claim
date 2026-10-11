@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import PlugAndClaimConfigEntry, PlugAndClaimCoordinator
+from .download import ReportDownloadView
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the integration-wide parts: logging default and actions."""
     _ensure_default_log_level()
     async_setup_services(hass)
+    hass.http.register_view(ReportDownloadView())
     return True
 
 

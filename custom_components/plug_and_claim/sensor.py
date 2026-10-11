@@ -22,6 +22,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CURRENCY
 from .coordinator import MonthSummary, PlugAndClaimConfigEntry, PlugAndClaimData
+from .download import async_signed_url
 from .entity import PlugAndClaimEntity
 
 # The coordinator pushes updates; no entity polls on its own.
@@ -90,6 +91,8 @@ class MonthSensor(PlugAndClaimEntity, SensorEntity):
     """kWh or claim amount for this month, last month or the selected month."""
 
     entity_description: MonthSensorDescription
+    # Signed download links are temporary keys: keep them out of history.
+    _unrecorded_attributes = frozenset({"pdf_url", "xlsx_url"})
 
     def __init__(self, coordinator, description: MonthSensorDescription) -> None:
         super().__init__(coordinator, description.key)
@@ -120,6 +123,12 @@ class MonthSensor(PlugAndClaimEntity, SensorEntity):
             attributes["report_files"] = report.get("files", [])
             attributes["report_generated"] = report.get("generated")
             attributes["report_amount"] = report.get("amount")
+            # Signed links for dashboards, e.g. a markdown card (see README).
+            entry_id = self.coordinator.config_entry.entry_id
+            for file in report.get("files", []):
+                suffix = file.rsplit(".", 1)[-1]
+                if suffix in ("pdf", "xlsx"):
+                    attributes[f"{suffix}_url"] = async_signed_url(self.hass, entry_id, file)
         return attributes
 
 
