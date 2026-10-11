@@ -181,7 +181,8 @@ async def test_nightly_sync_writes_yesterday(hass: HomeAssistant, sydney) -> Non
     night = datetime(2026, 10, 7, 0, 10, tzinfo=SYDNEY)
     sydney.move_to(night)
     async_fire_time_changed(hass, night)
-    await hass.async_block_till_done()
+    # Timer jobs run as background tasks.
+    await hass.async_block_till_done(wait_background_tasks=True)
     await async_wait_recording_done(hass)
     await hass.async_block_till_done()
 
@@ -218,7 +219,11 @@ async def test_live_capture_fallback(hass: HomeAssistant, sydney, caplog) -> Non
     night = datetime(2026, 10, 7, 0, 10, tzinfo=SYDNEY)
     sydney.move_to(night)
     async_fire_time_changed(hass, night)
-    await hass.async_block_till_done()
+    # Timer jobs run as background tasks, and the sync first asks the
+    # recorder (on its own database thread) whether statistics exist.
+    for _ in range(3):
+        await hass.async_block_till_done(wait_background_tasks=True)
+        await async_wait_recording_done(hass)
 
     assert coordinator.ledger.days == {"2026-10-06": {"kwh": 4.0, "source": "live"}}
 
