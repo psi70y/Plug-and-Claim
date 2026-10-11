@@ -8,11 +8,14 @@ import logging
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS
-from .coordinator import PlugAndClaimConfigEntry, PlugAndClaimCoordinator
+from .coordinator import (
+    PlugAndClaimConfigEntry,
+    PlugAndClaimCoordinator,
+    async_clear_missing_days_issues,
+)
 from .download import ReportDownloadView
 from .services import async_setup_services
 
@@ -45,6 +48,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> bool:
     """Set up one claim from a config entry."""
+    async_clear_missing_days_issues(hass, entry.entry_id)
     coordinator = PlugAndClaimCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
@@ -62,19 +66,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry)
 async def async_unload_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> bool:
     """Unload a claim. Listeners registered with async_on_unload are removed by HA."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-
-
-async def async_remove_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> None:
-    """Claim deleted: clear its Repairs issues.
-
-    The ledger file is deliberately kept in /config/.storage, so a claim
-    deleted by mistake doesn't lose its history.
-    """
-    issue_registry = ir.async_get(hass)
-    prefix = f"missing_days_{entry.entry_id}_"
-    for domain, issue_id in list(issue_registry.issues):
-        if domain == DOMAIN and issue_id.startswith(prefix):
-            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> None:

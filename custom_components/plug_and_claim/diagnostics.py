@@ -49,7 +49,6 @@ async def async_get_config_entry_diagnostics(
             "live": ledger.live,
             "months": months,
             "recent_days": {k: v for k, v in sorted(ledger.days.items()) if k >= since},
-            "rates": ledger.data["rates"],
             "reports": ledger.data["reports"],
             "finalised_months": ledger.data["finalised_months"],
         },

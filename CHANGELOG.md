@@ -18,7 +18,10 @@
 - Sensors for this month (including today so far), last month and a selected
   month (kWh and AUD), a "Report month" select, "Generate report" and
   "Sync now" buttons.
-- Repairs issue when a report has days with no data, cleared automatically
-  once the month is complete.
+- Days with no data count as 0 kWh (listed in diagnostics only).
 - Secure download links (signed, 24 hours, not recorded in history) for the
   selected month's PDF and XLSX, and an example dashboard card.
+- Automatic report for the previous month on the 1st at the set time, with
+  catch-up at startup during the first 7 days if Home Assistant was off.
+- Rate history: changing the rate asks which month it applies from, so
+  earlier months keep their rate.

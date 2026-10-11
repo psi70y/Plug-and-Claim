@@ -11,9 +11,8 @@ report (XLSX + PDF) for me, saved in Home Assistant's Media folder.
 It isn't tied to one brand: any `sensor` with the `energy` device class
 (kWh) works, so you can use it with other smart plugs or EV chargers.
 
-> **Status: early development (0.1.0, not released yet).** The daily ledger,
-> reports, entities and dashboard downloads work; the monthly schedule and
-> CSV import are still being built.
+> **Status: early development (0.1.0, not released yet).** Everything
+> described here works; packaging for the first release is still to come.
 
 ## Installation (HACS custom repository)
 
@@ -54,9 +53,9 @@ database, so the claim history survives a corrupted or purged database.
     The very first day is skipped if the statistics started part-way through it.
   - **Every night at 00:10:** it writes yesterday and re-checks the last
     14 days, which fills gaps after Home Assistant has been off.
-  - Days with **no statistics at all** are left out rather than saved as 0.
-    Days with some hours missing are kept and flagged (`gap_hours`), and a
-    warning is logged.
+  - Days with **no statistics at all** are left out of the ledger and count
+    as **0 kWh** in reports. Days with some hours missing count only the
+    hours that were recorded (`gap_hours` notes how many were missing).
 - **Live capture (fallback).** If the sensor has no statistics, Plug & Claim
   follows its state changes and adds up each day's increase. A warning in the
   log explains this. Days when Home Assistant was off may be incomplete.
@@ -73,6 +72,23 @@ plug's app shows. If you choose the plug's monthly sensor during setup, the
 diagnostics show each month's ledger total next to the plug's own month total
 so you can see the difference.
 
+## Automatic monthly report
+
+With **Generate the report automatically each month** on, Plug & Claim syncs
+and then writes last month's report on the 1st at the time you set (default
+01:00), and sends the notification if you set one. If Home Assistant was off
+at that time, it catches up when it next starts, during the first 7 days of
+the month. A month that already has a report isn't generated again; use the
+button or the `generate_report` action to regenerate it.
+
+## Rate changes
+
+When you change the rate under **Configure**, you're asked which month the
+new rate applies from (e.g. `2027-01`). Earlier months keep the rate they
+had, so their claims and regenerated reports don't change. The form shows
+the current rates; entering a rate for a month that already has one replaces
+it, which is how you correct a mistake.
+
 ## Reports
 
 Each report is an XLSX and a PDF in the same layout as the Tapo app export my
@@ -87,8 +103,8 @@ vehicle, registration, period, data source and when it was generated.
   video and images, so the reports don't show up there.)
 - **Amount** is total kWh × rate, rounded half-up to the cent
   (e.g. 255.303087 × $0.407 = $103.908… → **$103.91**).
-- **Days with no data** are shown as "no data" (never as 0), listed in the
-  header, and logged as a warning.
+- **Days with no data** (e.g. Home Assistant was off all day) count as
+  **0 kWh** and show as 0. They're still listed in the diagnostics.
 - Generating a month **finalises** it: automatic syncs no longer change it.
   Use `refresh_data: true` to re-read it from the recorder; values you set by
   hand are kept.
@@ -182,9 +198,7 @@ of Home Assistant's history.
 | Ledger days | Diagnostic. Number of days in the ledger; attributes show the capture mode and first/last day. |
 
 The month sensors also have `month`, `rate`, `day_count` and `missing_days`
-attributes. If a report is generated for a month with days that have no data,
-a **Repairs** issue lists them; it clears itself once you fill the days (with
-`set_day`) and generate the report again.
+attributes (days with no data, which count as 0 kWh).
 
 ## Actions
 

@@ -115,7 +115,7 @@ async def test_missing_days_and_no_notify(hass: HomeAssistant, entry: MockConfig
     )
     assert response["kwh"] == 255.303087  # 13 Sep was 0 kWh anyway
     assert entry.runtime_data.ledger.data["reports"]["2026-09"]["missing_days"] == ["2026-09-13"]
-    assert "no data for 2026-09-13" in caplog.text
+    assert "counts 2026-09-13 as 0 kWh" in caplog.text
     assert notifications == []
 
 
@@ -146,7 +146,12 @@ async def test_bad_month_format_rejected(hass: HomeAssistant, entry: MockConfigE
 
 async def test_rate_history_used_for_old_months(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     coordinator = entry.runtime_data
-    coordinator.ledger.data["rates"] = [{"from": "2025-01", "rate": 0.39}, {"from": "2026-10", "rate": 0.42}]
+    hass.config_entries.async_update_entry(
+        entry,
+        options={**entry.options, "rate_history": [{"from": "2025-01", "rate": 0.39}, {"from": "2026-10", "rate": 0.42}]},
+    )
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data  # reloaded with the new options
     assert coordinator.rate_for_month("2026-09") == 0.39
     assert coordinator.rate_for_month("2026-10") == 0.42
     assert coordinator.rate_for_month("2024-12") == 0.407  # before any history: current setting

@@ -8,7 +8,9 @@ the sensors from step 1 are fixed (delete and re-add the claim to change them,
 since the ledger built from one sensor doesn't apply to another).
 """
 
+from datetime import date
 import logging
+import re
 from typing import Any
 
 # HA 2026.9 replaced voluptuous with probatio, which keeps the same API.
@@ -28,10 +30,12 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
+from homeassistant.util import dt as dt_util
 from homeassistant.util import slugify
 
 from .const import (
     CONF_AUTO_GENERATE,
+    CONF_EFFECTIVE_FROM,
     CONF_ENERGY_SENSOR,
     CONF_GENERATE_TIME,
     CONF_INCLUDE_HEADER,
@@ -41,6 +45,7 @@ from .const import (
     CONF_OUTPUT_FOLDER,
     CONF_POWER_SENSOR,
     CONF_RATE,
+    CONF_RATE_HISTORY,
     CONF_REGISTRATION,
     CONF_VEHICLE,
     CURRENCY,
@@ -57,10 +62,12 @@ from .const import (
     TPLINK_POWER_KEY,
     TPLINK_TODAY_KEY,
 )
+from .rates import add_rate, describe
 
 _LOGGER = logging.getLogger(__name__)
 
 NOTIFY_DOMAIN = "notify"
+MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
 def _sensor_selector(device_class: str) -> selector.EntitySelector:
@@ -236,20 +243,31 @@ class PlugAndClaimConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class PlugAndClaimOptionsFlow(OptionsFlow):
-    """Edit the claim details from step 2. HA provides self.config_entry."""
+    """Edit the claim details from step 2. HA provides self.config_entry.
+
+    Changing the rate adds a second step asking which month the new rate
+    applies from, so earlier months keep the rate they had (rate history).
+    """
+
+    def __init__(self) -> None:
+        self._options: dict[str, Any] = {}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
-        suggested: dict[str, Any] = {
-            **_default_claim_options(self.config_entry.title),
-            **self.config_entry.options,
-        }
+        current = self.config_entry.options
+        suggested: dict[str, Any] = {**_default_claim_options(self.config_entry.title), **current}
 
         if user_input is not None:
             options = _clean_claim_input(user_input)
             errors = _validate_claim(self.hass, options)
             if not errors:
-                # Replace (not merge) so cleared optional fields are removed.
+                # Replace (not merge) so cleared optional fields are removed,
+                # but keep the rate history, which isn't on this form.
+                if CONF_RATE_HISTORY in current:
+                    options[CONF_RATE_HISTORY] = current[CONF_RATE_HISTORY]
+                self._options = options
+                if options[CONF_RATE] != current.get(CONF_RATE, options[CONF_RATE]):
+                    return await self.async_step_rate_from()
                 return self.async_create_entry(data=options)
             suggested = user_input
 
@@ -257,4 +275,39 @@ class PlugAndClaimOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(_claim_schema(), suggested),
             errors=errors,
+            description_placeholders={
+                "rates": describe(current.get(CONF_RATE_HISTORY), current.get(CONF_RATE, DEFAULT_RATE))
+            },
+        )
+
+    async def async_step_rate_from(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Ask from which month the new rate applies."""
+        errors: dict[str, str] = {}
+        current = self.config_entry.options
+        old_rate = current.get(CONF_RATE, DEFAULT_RATE)
+        new_rate = self._options[CONF_RATE]
+
+        if user_input is not None:
+            month = user_input[CONF_EFFECTIVE_FROM].strip()
+            if not MONTH_PATTERN.match(month):
+                errors[CONF_EFFECTIVE_FROM] = "invalid_month"
+            else:
+                self._options[CONF_RATE_HISTORY] = add_rate(
+                    current.get(CONF_RATE_HISTORY), old_rate, new_rate, month
+                )
+                return self.async_create_entry(data=self._options)
+
+        this_month = dt_util.now().date().strftime("%Y-%m")
+        return self.async_show_form(
+            step_id="rate_from",
+            data_schema=self.add_suggested_values_to_schema(
+                vol.Schema({vol.Required(CONF_EFFECTIVE_FROM): _text_selector()}),
+                {CONF_EFFECTIVE_FROM: this_month},
+            ),
+            errors=errors,
+            description_placeholders={
+                "old_rate": f"{old_rate:.6f}",
+                "new_rate": f"{new_rate:.6f}",
+                "rates": describe(current.get(CONF_RATE_HISTORY), old_rate),
+            },
         )

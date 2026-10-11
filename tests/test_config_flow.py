@@ -163,9 +163,52 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert _suggested(result, CONF_REGISTRATION) == "ABC123"
 
-    # Change the rate and clear the registration (an Optional field left out).
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**CLAIM_INPUT, CONF_RATE: 0.42}
-    )
+    # Clear the registration (an Optional field left out): no rate step.
+    result = await hass.config_entries.options.async_configure(result["flow_id"], CLAIM_INPUT)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {**CLAIM_INPUT, CONF_RATE: 0.42}
+    assert entry.options == CLAIM_INPUT
+
+
+async def test_options_rate_change_asks_from_when(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="EV charging",
+        data={CONF_NAME: "EV charging", CONF_ENERGY_SENSOR: ENERGY},
+        options=CLAIM_INPUT,
+    )
+    entry.add_to_hass(hass)
+
+    async def change_rate(rate: float, month: str):
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {**CLAIM_INPUT, CONF_RATE: rate}
+        )
+        assert result["step_id"] == "rate_from"
+        assert result["description_placeholders"]["new_rate"] == f"{rate:.6f}"
+        bad = await hass.config_entries.options.async_configure(result["flow_id"], {"effective_from": "Jan 2027"})
+        assert bad["errors"] == {"effective_from": "invalid_month"}
+        return await hass.config_entries.options.async_configure(result["flow_id"], {"effective_from": month})
+
+    result = await change_rate(0.42, "2027-01")
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_RATE] == 0.42
+    assert entry.options["rate_history"] == [
+        {"from": "2000-01", "rate": 0.407},
+        {"from": "2027-01", "rate": 0.42},
+    ]
+
+    # A later change keeps the history; the same month again replaces it.
+    await change_rate(0.45, "2027-07")
+    await change_rate(0.44, "2027-07")
+    assert entry.options["rate_history"] == [
+        {"from": "2000-01", "rate": 0.407},
+        {"from": "2027-01", "rate": 0.42},
+        {"from": "2027-07", "rate": 0.44},
+    ]
+
+    # Editing something else keeps the history untouched.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {**CLAIM_INPUT, CONF_RATE: 0.44, CONF_VEHICLE: "Outlander"}
+    )
+    assert len(entry.options["rate_history"]) == 3

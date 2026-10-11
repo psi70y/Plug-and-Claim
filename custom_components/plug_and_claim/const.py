@@ -21,6 +21,9 @@ CONF_GENERATE_TIME = "generate_time"
 CONF_OUTPUT_FOLDER = "output_folder"
 CONF_NOTIFY_SERVICE = "notify_service"
 CONF_INCLUDE_HEADER = "include_header"
+# Set by the options flow when the rate changes (see rates.py).
+CONF_RATE_HISTORY = "rate_history"
+CONF_EFFECTIVE_FROM = "effective_from"
 
 DEFAULT_NAME = "EV charging"
 DEFAULT_RATE = 0.407

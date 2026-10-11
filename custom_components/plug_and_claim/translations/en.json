@@ -69,13 +69,25 @@
           "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
           "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover.",
           "include_header": "Adds the title, vehicle, registration, period, data source and generated time above the tables."
+        },
+        "description": "Current rates: {rates}."
+      },
+      "rate_from": {
+        "title": "When does the new rate apply?",
+        "description": "You changed the rate from ${old_rate} to ${new_rate} per kWh. Months before the month you enter keep their earlier rate, so their claims don't change.\n\nCurrent rates: {rates}.",
+        "data": {
+          "effective_from": "New rate applies from (YYYY-MM)"
+        },
+        "data_description": {
+          "effective_from": "E.g. 2027-01. Entering a month that already has a rate replaces it."
         }
       }
     },
     "error": {
       "invalid_rate": "The rate must be greater than 0.",
       "invalid_folder": "Enter a relative folder path such as plug_and_claim/ev_charging (no \"..\" or backslashes).",
-      "notify_not_found": "That notify action doesn't exist. Use the full name, e.g. notify.pushover."
+      "notify_not_found": "That notify action doesn't exist. Use the full name, e.g. notify.pushover.",
+      "invalid_month": "Enter the month as YYYY-MM, e.g. 2027-01."
     }
   },
   "entity": {
@@ -318,12 +330,6 @@
           "description": "Send the notification. Leave out to notify only if a notify action is set in the claim's settings."
         }
       }
-    }
-  },
-  "issues": {
-    "missing_days": {
-      "title": "{name}: {month} report has days with no data",
-      "description": "The {month} report for {name} was generated, but the ledger has no data for: {days}.\n\nThese days are shown as \"no data\" in the report, not as 0 kWh. If you know the values, set them with the **Plug & Claim: Set day** action, then generate the report again. This issue clears itself once the month is complete."
     }
   }
 }

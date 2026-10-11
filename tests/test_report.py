@@ -52,7 +52,7 @@ def test_amount_rounds_half_up(kwh: str, rate: float, amount: str) -> None:
     assert report.amount == Decimal(amount)
 
 
-def test_missing_days_are_listed_not_zero() -> None:
+def test_missing_days_count_as_zero() -> None:
     days = {k: v for k, v in SEPTEMBER.items() if k not in ("2026-09-13", "2026-09-14")}
     report = build_report("2026-09", days, 0.407)
     assert report.missing_days == [date(2026, 9, 13), date(2026, 9, 14)]

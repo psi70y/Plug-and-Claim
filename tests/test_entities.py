@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from openpyxl import load_workbook
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -51,7 +52,7 @@ async def entry(
         data={CONF_NAME: "EV charging", CONF_ENERGY_SENSOR: "sensor.plug_today_s_consumption"},
         options={
             CONF_RATE: 0.407,
-            CONF_AUTO_GENERATE: True,
+            CONF_AUTO_GENERATE: False,  # schedule tested in test_schedule.py
             CONF_GENERATE_TIME: "01:00:00",
             CONF_OUTPUT_FOLDER: "plug_and_claim/ev_charging",
         },
@@ -107,41 +108,35 @@ async def test_report_month_select(hass: HomeAssistant, entry: MockConfigEntry) 
     assert hass.states.get("select.ev_charging_report_month").state == "2026-08 (Aug 2026)"
 
 
-async def test_generate_button_and_repairs_issue(
+async def test_generate_button_missing_day_counts_as_zero(
     hass: HomeAssistant, entry: MockConfigEntry, tmp_path: Path
 ) -> None:
-    issues = ir.async_get(hass)
     await hass.services.async_call(
         "button", "press", {"entity_id": "button.ev_charging_generate_report_for_selected_month"}, blocking=True
     )
     await hass.async_block_till_done()
-    assert (tmp_path / "plug_and_claim/ev_charging/2026/Energy_Usage_Sep_2026.pdf").exists()
+    xlsx = tmp_path / "plug_and_claim/ev_charging/2026/Energy_Usage_Sep_2026.xlsx"
+    assert xlsx.exists()
 
-    issue = issues.async_get_issue(DOMAIN, ISSUE_ID)
-    assert issue is not None
-    assert issue.translation_placeholders["days"] == "2026-09-13"
+    # 13 Sep has no data: it shows as 0, and no Repairs issue is raised.
+    rows = {r[0].day: r[1] for r in load_workbook(xlsx).active.iter_rows(values_only=True)
+            if isinstance(r[0], datetime) and isinstance(r[1], (int, float))}
+    assert rows[13] == 0.0
+    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ID) is None
+    # It is still recorded, for the diagnostics.
+    assert entry.runtime_data.ledger.data["reports"]["2026-09"]["missing_days"] == ["2026-09-13"]
 
     selected = hass.states.get("sensor.ev_charging_selected_month_energy")
     assert selected.attributes["report_generated"] is not None
     assert len(selected.attributes["report_files"]) == 2
 
-    # Fill the gap, regenerate: the issue clears itself.
-    await hass.services.async_call(
-        DOMAIN, "set_day", {"config_entry_id": entry.entry_id, "date": "2026-09-13", "kwh": 0}, blocking=True
-    )
-    await hass.services.async_call(
-        "button", "press", {"entity_id": "button.ev_charging_generate_report_for_selected_month"}, blocking=True
-    )
-    await hass.async_block_till_done()
-    assert issues.async_get_issue(DOMAIN, ISSUE_ID) is None
 
-
-async def test_issue_removed_with_claim(hass: HomeAssistant, entry: MockConfigEntry) -> None:
-    await hass.services.async_call(
-        "button", "press", {"entity_id": "button.ev_charging_generate_report_for_selected_month"}, blocking=True
+async def test_old_missing_days_issues_cleared(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    """Issues raised by earlier versions are removed when the claim loads."""
+    ir.async_create_issue(
+        hass, DOMAIN, ISSUE_ID, is_fixable=False, severity=ir.IssueSeverity.WARNING, translation_key="missing_days"
     )
-    assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ID) is not None
-    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     assert ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_ID) is None
 

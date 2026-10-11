@@ -97,8 +97,10 @@ def build_report(
 ) -> MonthReport:
     """Make a MonthReport from ledger values ({'2026-09-01': 6.09, ...}).
 
-    Every calendar day of the month gets a row; days missing from the ledger
-    are kept as None so they can be listed instead of silently becoming 0.
+    Every calendar day of the month gets a row. Days missing from the ledger
+    (no data at all, e.g. Home Assistant was off) count as 0 kWh: they are
+    shown as 0 and add nothing to the total, but stay listed in
+    missing_days for the diagnostics.
     Values go through str() so 6.09 stays exactly 6.09 in Decimal.
     """
     year, mon = (int(part) for part in month.split("-"))
@@ -126,8 +128,6 @@ def header_lines(report: MonthReport) -> list[tuple[str, str]]:
         lines.append(("Registration", report.registration))
     if report.source:
         lines.append(("Data source", report.source))
-    if report.missing_days:
-        lines.append(("Days with no data", ", ".join(f"{d.day} {d:%b}" for d in report.missing_days)))
     if report.generated:
         # Built by hand: "%-d" isn't supported by every C library (e.g. musl).
         g = report.generated
@@ -187,7 +187,7 @@ def write_xlsx(report: MonthReport, path: Path) -> None:
     for day, kwh in report.days:
         boxed_row([
             (datetime(day.year, day.month, day.day), FMT_DATE),
-            (float(kwh) if kwh is not None else "no data", FMT_KWH),
+            (float(kwh) if kwh is not None else 0.0, FMT_KWH),
         ])
         ws.cell(row, 1).alignment = Alignment(horizontal="left")
         ws.cell(row, 2).alignment = Alignment(horizontal="right")
@@ -257,7 +257,7 @@ def write_pdf(report: MonthReport, path: Path) -> None:
     for day, kwh in report.days:
         table_row([
             (f"{day:%Y/%m/%d}", widths[0], "L"),
-            (format_kwh(kwh) if kwh is not None else "no data", widths[1], "R"),
+            (format_kwh(kwh) if kwh is not None else "0", widths[1], "R"),
         ])
 
     pdf.output(str(path))

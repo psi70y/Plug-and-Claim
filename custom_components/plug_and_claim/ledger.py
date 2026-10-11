@@ -8,7 +8,7 @@ so a crash mid-save can't leave a half-written file.
 Layout (version 1):
     {
       "days": {"2026-09-01": {"kwh": 6.09, "source": "statistics"}, ...},
-      "rates": [{"from": "2025-01", "rate": 0.407}],       # Phase 5
+      "rates": [],            # unused; rate history lives in the options
       "reports": {"2026-09": {...}},                        # Phase 3
       "finalised_months": ["2026-09"],                      # Phase 3
       "meta": {"last_sync": "<iso>", "backfilled": true, "stats_start": "2025-03-14"},

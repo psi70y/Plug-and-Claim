@@ -57,7 +57,9 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_AUTO_GENERATE,
     CONF_ENERGY_SENSOR,
+    CONF_GENERATE_TIME,
     CONF_INCLUDE_HEADER,
     CONF_MONTH_SENSOR,
     CONF_NOTIFY_SERVICE,
@@ -65,6 +67,8 @@ from .const import (
     CONF_RATE,
     CONF_REGISTRATION,
     CONF_VEHICLE,
+    DEFAULT_AUTO_GENERATE,
+    DEFAULT_GENERATE_TIME,
     DEFAULT_INCLUDE_HEADER,
     DEFAULT_RATE,
     DOMAIN,
@@ -81,6 +85,7 @@ from .ledger import (
     local_midnight,
     month_key,
 )
+from .rates import rate_for_month
 from .report import MonthReport, build_report, write_pdf, write_xlsx
 
 _LOGGER = logging.getLogger(__name__)
@@ -88,6 +93,9 @@ _LOGGER = logging.getLogger(__name__)
 type PlugAndClaimConfigEntry = ConfigEntry[PlugAndClaimCoordinator]
 
 DEFAULT_SYNC_DAYS = 14
+# A report missed because HA was off on the 1st is caught up at startup,
+# but only during the first days of the month.
+CATCH_UP_DAYS = 7
 # How often "this month" (which includes today so far) is recalculated.
 REFRESH_INTERVAL = timedelta(minutes=5)
 # Nightly sync time (local). 10 minutes past midnight leaves the recorder
@@ -275,8 +283,16 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
 
         async def _at_started(_hass: HomeAssistant) -> None:
             await self._async_scheduled_sync()
+            await self._async_catch_up_report()
 
         entry.async_on_unload(async_at_started(self.hass, _at_started))
+        if self.auto_generate:
+            hour, minute, second = self.generate_time
+            entry.async_on_unload(
+                async_track_time_change(
+                    self.hass, self._async_monthly, hour=hour, minute=minute, second=second
+                )
+            )
         entry.async_on_unload(
             async_track_time_change(
                 self.hass, self._async_nightly, hour=SYNC_HOUR, minute=SYNC_MINUTE, second=0
@@ -286,6 +302,50 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
 
     async def _async_nightly(self, _now: datetime) -> None:
         await self._async_scheduled_sync()
+
+    # ------------------------------------------------------ monthly report
+
+    @property
+    def auto_generate(self) -> bool:
+        return self.config_entry.options.get(CONF_AUTO_GENERATE, DEFAULT_AUTO_GENERATE)
+
+    @property
+    def generate_time(self) -> tuple[int, int, int]:
+        """The report time on the 1st, e.g. "06:30:00" -> (6, 30, 0)."""
+        value = self.config_entry.options.get(CONF_GENERATE_TIME, DEFAULT_GENERATE_TIME)
+        parts = [int(part) for part in value.split(":")] + [0, 0]
+        return parts[0], parts[1], parts[2]
+
+    async def _async_monthly(self, now: datetime) -> None:
+        """Fires daily at the report time; acts only on the 1st."""
+        if dt_util.as_local(now).day == 1:
+            await self._async_auto_report()
+
+    async def _async_catch_up_report(self) -> None:
+        """At startup: generate last month's report if the 1st's run was
+        missed (HA off), during the first CATCH_UP_DAYS days of the month."""
+        if not self.auto_generate:
+            return
+        now = dt_util.now()
+        hour, minute, second = self.generate_time
+        due = now.replace(day=1, hour=hour, minute=minute, second=second, microsecond=0)
+        if due <= now and now.day <= CATCH_UP_DAYS:
+            await self._async_auto_report()
+
+    async def _async_auto_report(self) -> None:
+        """Sync, then report on last month unless it already has a report."""
+        month = month_key(dt_util.now().date().replace(day=1) - timedelta(days=1))
+        if month in self.ledger.data["reports"]:
+            return
+        try:
+            await self.async_sync()
+            if not self.ledger.month_days(month):
+                _LOGGER.info("%s: no data for %s, so no automatic report", self.config_entry.title, month)
+                return
+            _LOGGER.info("%s: generating the automatic report for %s", self.config_entry.title, month)
+            await self.async_generate_report(month)
+        except Exception:
+            _LOGGER.exception("%s: automatic report for %s failed", self.config_entry.title, month)
 
     async def _async_scheduled_sync(self) -> None:
         """Automatic sync; a failure is logged and retried at the next one."""
@@ -550,16 +610,8 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
     # --------------------------------------------------------------- reports
 
     def rate_for_month(self, month: str) -> float:
-        """The rate that applies to a month.
-
-        Rate history (ledger "rates", added in Phase 5) wins: the latest entry
-        whose "from" month is on or before this month. Otherwise the current
-        rate from the claim's settings.
-        """
-        applicable = [r for r in self.ledger.data["rates"] if r["from"] <= month]
-        if applicable:
-            return max(applicable, key=lambda r: r["from"])["rate"]
-        return self.config_entry.options.get(CONF_RATE, DEFAULT_RATE)
+        """The rate that applies to a month (see rates.py for the history)."""
+        return rate_for_month(self.config_entry.options, month)
 
     def media_root(self) -> Path:
         """HA's media folder (/media on HA OS), as the Media browser sees it."""
@@ -608,7 +660,7 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
         folder = self.report_folder(month)
         files = await self.hass.async_add_executor_job(_write_report_files, report, folder)
 
-        self._update_missing_days_issue(report)
+        self._log_missing_days(report)
 
         result = {
             "entry_id": self.config_entry.entry_id,
@@ -650,33 +702,15 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
             await self._async_notify(notify_service, report, folder)
         return result
 
-    def _update_missing_days_issue(self, report: MonthReport) -> None:
-        """Raise a Repairs issue when a report has days with no data, or clear
-        it once the month is regenerated complete (e.g. after set_day)."""
-        issue_id = missing_days_issue_id(self.config_entry.entry_id, report.month)
-        if not report.missing_days:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-            return
-        days = ", ".join(d.isoformat() for d in report.missing_days)
-        _LOGGER.warning(
-            "%s: %s report generated with no data for %s",
-            self.config_entry.title,
-            report.long_name,
-            days,
-        )
-        ir.async_create_issue(
-            self.hass,
-            DOMAIN,
-            issue_id,
-            is_fixable=False,
-            severity=ir.IssueSeverity.WARNING,
-            translation_key="missing_days",
-            translation_placeholders={
-                "name": self.config_entry.title,
-                "month": report.long_name,
-                "days": days,
-            },
-        )
+    def _log_missing_days(self, report: MonthReport) -> None:
+        """Days with no data count as 0 kWh; note them in the log only."""
+        if report.missing_days:
+            _LOGGER.info(
+                "%s: %s report counts %s as 0 kWh (no data)",
+                self.config_entry.title,
+                report.long_name,
+                ", ".join(d.isoformat() for d in report.missing_days),
+            )
 
     async def _async_notify(self, service: str, report: MonthReport, folder: Path) -> None:
         # HA's Media browser only lists audio/video/images, so point to the
@@ -708,8 +742,17 @@ class PlugAndClaimCoordinator(DataUpdateCoordinator[PlugAndClaimData]):
             _LOGGER.info("%s: %s set manually to %s kWh", self.config_entry.title, day, kwh)
 
 
-def missing_days_issue_id(entry_id: str, month: str) -> str:
-    return f"missing_days_{entry_id}_{month}"
+@callback
+def async_clear_missing_days_issues(hass: HomeAssistant, entry_id: str) -> None:
+    """Remove the "days with no data" Repairs issues earlier versions raised.
+
+    Missing days now simply count as 0 kWh, so these issues no longer apply.
+    """
+    registry = ir.async_get(hass)
+    prefix = f"missing_days_{entry_id}_"
+    for domain, issue_id in list(registry.issues):
+        if domain == DOMAIN and issue_id.startswith(prefix):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 def _write_report_files(report: MonthReport, folder: Path) -> list[Path]:
