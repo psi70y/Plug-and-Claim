@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.0 - 2026-11-18
+
+- New-version notifications: once a day the integration asks GitHub for the
+  latest release and, if it's newer than the installed version, shows a Home
+  Assistant notification with a link to the release notes. One notification
+  per release; it clears itself after you update. Only GitHub is contacted,
+  and the time of the last check is saved so restarts don't add checks.
+- New option **Notify me about new versions** (on by default) under
+  Configure. Turning it off in any claim turns it off for the whole
+  integration.
+- Notifications start with the release after this one.
+
 ## 0.1.0 - 2026-10-11
 
 First release.
