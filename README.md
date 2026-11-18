@@ -18,6 +18,16 @@ Requires Home Assistant 2025.2 or newer. It installs two pure-Python
 libraries, `openpyxl` (XLSX) and `fpdf2` (PDF), so it runs on any platform,
 including Home Assistant OS on ARM.
 
+## What's new
+
+**0.2.0 — New-version notifications.** Home Assistant now tells you when a
+new version of Plug & Claim is available, with a link to the release notes.
+It checks GitHub at most once a day, notifies once per release and is easy to
+turn off. See [New-version notifications](#new-version-notifications).
+Notifications start with the release after 0.2.0.
+
+Earlier changes are in the [changelog](CHANGELOG.md).
+
 ## Installation (HACS custom repository)
 
 1. In HACS, open the menu (⋮) → **Custom repositories**.
@@ -42,6 +52,21 @@ Manual install: copy `custom_components/plug_and_claim` into your
 
 You can change the claim details later with **Configure**. You can add more
 than one claim, e.g. one per car or plug.
+
+### New-version notifications
+
+By default the integration checks GitHub once a day for a newer release. If
+there is one, it shows a Home Assistant notification with the new and
+installed versions and a link to the release notes. You get one notification
+per release (a dismissed one doesn't come back), and it clears itself once
+you've updated. Only GitHub is contacted, and restarting Home Assistant
+doesn't cause extra checks. HACS also lists the update under
+**Settings → Updates**.
+
+To turn it off, untick **Notify me about new versions** under
+**Settings → Devices & services → Plug & Claim → Configure**. If you have
+several claims, turning it off in any one of them turns it off for the whole
+integration.
 
 ## How the daily ledger works
 
