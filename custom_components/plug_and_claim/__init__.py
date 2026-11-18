@@ -18,6 +18,7 @@ from .coordinator import (
 )
 from .download import ReportDownloadView
 from .services import async_setup_services
+from .update_check import async_sync_update_check
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -58,6 +59,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry)
     coordinator.async_start()
     # Reload when options change so new settings take effect straight away.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    # Start the new-version check (once per HA instance) if it's wanted.
+    await async_sync_update_check(hass)
 
     _LOGGER.info("Set up claim '%s' for %s", entry.title, entry.data.get("energy_sensor"))
     return True
@@ -65,7 +68,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry)
 
 async def async_unload_entry(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> bool:
     """Unload a claim. Listeners registered with async_on_unload are removed by HA."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        # Stop the new-version check with the last claim, or start it again
+        # if the claim that had it turned off is gone.
+        await async_sync_update_check(hass)
+    return unloaded
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: PlugAndClaimConfigEntry) -> None:

@@ -24,11 +24,15 @@ CONF_INCLUDE_HEADER = "include_header"
 # Set by the options flow when the rate changes (see rates.py).
 CONF_RATE_HISTORY = "rate_history"
 CONF_EFFECTIVE_FROM = "effective_from"
+# Options flow only: the new-version notification (update_check.py). Turning
+# it off in any claim turns it off for the whole integration.
+CONF_UPDATE_NOTIFY = "update_notify_enabled"
 
 DEFAULT_NAME = "EV charging"
 DEFAULT_RATE = 0.407
 DEFAULT_AUTO_GENERATE = True
 DEFAULT_INCLUDE_HEADER = True
+DEFAULT_UPDATE_NOTIFY = True
 # Reports are generated on the 1st of the month at this local time.
 DEFAULT_GENERATE_TIME = "01:00:00"
 # Output folder is relative to HA's media folder; the claim's slug is appended.

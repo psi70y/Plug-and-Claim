@@ -60,7 +60,8 @@
           "generate_time": "Report time on the 1st of the month",
           "output_folder": "Report folder (inside Media)",
           "notify_service": "Notify action",
-          "include_header": "Include the header block in reports"
+          "include_header": "Include the header block in reports",
+          "update_notify_enabled": "Notify me about new versions"
         },
         "data_description": {
           "rate": "The home charging rate you claim, in AUD per kWh (up to 6 decimals).",
@@ -68,7 +69,8 @@
           "registration": "Optional. Shown in the report header.",
           "output_folder": "Reports are saved under this folder in HA's media folder, one sub-folder per year.",
           "notify_service": "Optional. A notify action to call when a report is ready, e.g. notify.pushover.",
-          "include_header": "Adds the title, vehicle, registration, period, data source and generated time above the tables."
+          "include_header": "Adds the title, vehicle, registration, period, data source and generated time above the tables.",
+          "update_notify_enabled": "Shows a Home Assistant notification when a new release is on GitHub. Checked once a day; only GitHub is contacted. Turning it off here turns it off for every claim."
         },
         "description": "Current rates: {rates}."
       },

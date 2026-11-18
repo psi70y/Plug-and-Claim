@@ -21,6 +21,7 @@ from custom_components.plug_and_claim.const import (
     CONF_POWER_SENSOR,
     CONF_RATE,
     CONF_REGISTRATION,
+    CONF_UPDATE_NOTIFY,
     CONF_VEHICLE,
     DOMAIN,
 )
@@ -162,11 +163,22 @@ async def test_options_flow(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.FORM
     assert _suggested(result, CONF_REGISTRATION) == "ABC123"
+    # New-version notifications are on unless turned off.
+    assert _suggested(result, CONF_UPDATE_NOTIFY) is True
 
     # Clear the registration (an Optional field left out): no rate step.
     result = await hass.config_entries.options.async_configure(result["flow_id"], CLAIM_INPUT)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == CLAIM_INPUT
+    assert entry.options == {**CLAIM_INPUT, CONF_UPDATE_NOTIFY: True}
+
+    # Turning notifications off is saved and shown next time.
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**CLAIM_INPUT, CONF_UPDATE_NOTIFY: False}
+    )
+    assert entry.options[CONF_UPDATE_NOTIFY] is False
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert _suggested(result, CONF_UPDATE_NOTIFY) is False
 
 
 async def test_options_rate_change_asks_from_when(hass: HomeAssistant) -> None:

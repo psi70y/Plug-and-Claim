@@ -47,6 +47,7 @@ from .const import (
     CONF_RATE,
     CONF_RATE_HISTORY,
     CONF_REGISTRATION,
+    CONF_UPDATE_NOTIFY,
     CONF_VEHICLE,
     CURRENCY,
     DEFAULT_AUTO_GENERATE,
@@ -54,6 +55,7 @@ from .const import (
     DEFAULT_INCLUDE_HEADER,
     DEFAULT_NAME,
     DEFAULT_RATE,
+    DEFAULT_UPDATE_NOTIFY,
     DOMAIN,
     OUTPUT_FOLDER_ROOT,
     RATE_DECIMALS,
@@ -116,6 +118,18 @@ def _claim_schema() -> vol.Schema:
         vol.Required(CONF_OUTPUT_FOLDER): _text_selector(),
         vol.Required(CONF_INCLUDE_HEADER): selector.BooleanSelector(),
         vol.Optional(CONF_NOTIFY_SERVICE): _text_selector(),
+    })
+
+
+def _options_schema() -> vol.Schema:
+    """Options flow: the claim details plus the new-version notification.
+
+    The tickbox isn't in setup step 2, so new claims start with the default
+    (on). Turning it off in any claim turns it off for the whole integration.
+    """
+    return _claim_schema().extend({
+        # Optional with a default, so a form sent without it keeps it on.
+        vol.Optional(CONF_UPDATE_NOTIFY, default=DEFAULT_UPDATE_NOTIFY): selector.BooleanSelector(),
     })
 
 
@@ -255,7 +269,11 @@ class PlugAndClaimOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         current = self.config_entry.options
-        suggested: dict[str, Any] = {**_default_claim_options(self.config_entry.title), **current}
+        suggested: dict[str, Any] = {
+            **_default_claim_options(self.config_entry.title),
+            CONF_UPDATE_NOTIFY: DEFAULT_UPDATE_NOTIFY,
+            **current,
+        }
 
         if user_input is not None:
             options = _clean_claim_input(user_input)
@@ -273,7 +291,7 @@ class PlugAndClaimOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(_claim_schema(), suggested),
+            data_schema=self.add_suggested_values_to_schema(_options_schema(), suggested),
             errors=errors,
             description_placeholders={
                 "rates": describe(current.get(CONF_RATE_HISTORY), current.get(CONF_RATE, DEFAULT_RATE))
